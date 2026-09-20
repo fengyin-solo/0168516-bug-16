@@ -1,4 +1,4 @@
-import { Card, Tag, Tooltip, Button, Popconfirm } from 'antd';
+import { Card, Tag, Tooltip, Button, Popconfirm, message } from 'antd';
 import {
   StarOutlined,
   StarFilled,
@@ -30,6 +30,14 @@ export function TemplateCard({
     e.stopPropagation();
   };
 
+  const handleCopyContent = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard
+      .writeText(template.content)
+      .then(() => message.success('模板内容已复制'))
+      .catch(() => message.error('复制失败，请手动选择内容复制'));
+  };
+
   return (
     <Card
       className="template-card"
@@ -50,10 +58,7 @@ export function TemplateCard({
           <Button
             type="text"
             icon={<CopyOutlined />}
-            onClick={(e) => {
-              e.stopPropagation();
-              navigator.clipboard.writeText(template.content);
-            }}
+            onClick={handleCopyContent}
           />
         </Tooltip>,
         <Tooltip key="edit" title="编辑">

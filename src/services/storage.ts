@@ -223,17 +223,113 @@ export function importData(data: { config?: AppConfig; conversations?: Conversat
 }
 
 /**
+ * 为默认模板生成稳定的内容标识，避免数组位置变化后操作串到相邻卡片。
+ * @param seed 用于生成标识的稳定内容
+ */
+function createStableTemplateId(seed: string): string {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash = (hash << 5) - hash + seed.charCodeAt(i);
+    hash |= 0;
+  }
+  return `default-${(hash >>> 0).toString(36)}`;
+}
+
+/**
  * 生成默认提示词模板
  * @returns 默认模板列表
  */
 function generateDefaultTemplates(): PromptTemplate[] {
   const now = Date.now();
-  return DEFAULT_TEMPLATES.map((template, index) => ({
-    ...template,
-    id: `default-${index}`,
-    createdAt: now,
-    updatedAt: now,
-  }));
+  const usedIds = new Set<string>();
+
+  return DEFAULT_TEMPLATES.map((template) => {
+    const seed = `${template.name}\n${template.category}\n${template.content}`;
+    let id = createStableTemplateId(seed);
+    let suffix = 1;
+
+    while (usedIds.has(id)) {
+      id = createStableTemplateId(`${seed}\n${suffix}`);
+      suffix += 1;
+    }
+    usedIds.add(id);
+
+    return {
+      ...template,
+      id,
+      createdAt: now,
+      updatedAt: now,
+    };
+  });
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+/**
+ * 规范化本地模板数据，修复历史数据中重复 id、缺失字段等问题。
+ * @param templates 从 localStorage 解析出的模板
+ * @returns 可安全渲染的数据及是否发生过修复
+ */
+function normalizeStoredTemplates(templates: unknown[]): {
+  templates: PromptTemplate[];
+  changed: boolean;
+} {
+  const normalized: PromptTemplate[] = [];
+  const usedIds = new Set<string>();
+  let changed = templates.some((item) => item === null || item === undefined);
+
+  templates.forEach((item, index) => {
+    if (!item || typeof item !== 'object') {
+      changed = true;
+      return;
+    }
+
+    const candidate = item as Partial<PromptTemplate>;
+    if (!isNonEmptyString(candidate.name) || !isNonEmptyString(candidate.content)) {
+      changed = true;
+      return;
+    }
+
+    const category = isNonEmptyString(candidate.category) ? candidate.category : '其他';
+    const createdAt = typeof candidate.createdAt === 'number' ? candidate.createdAt : Date.now();
+    const updatedAt = typeof candidate.updatedAt === 'number' ? candidate.updatedAt : createdAt;
+    const isFavorite = Boolean(candidate.isFavorite);
+    const description = typeof candidate.description === 'string' ? candidate.description : undefined;
+    let id = isNonEmptyString(candidate.id) ? candidate.id : `repaired-${createdAt}-${index}`;
+
+    if (usedIds.has(id)) {
+      id = `${id}-${createdAt.toString(36)}-${normalized.length}`;
+    }
+    usedIds.add(id);
+
+    const normalizedTemplate: PromptTemplate = {
+      id,
+      name: candidate.name,
+      content: candidate.content,
+      category,
+      description,
+      isFavorite,
+      createdAt,
+      updatedAt,
+    };
+
+    if (
+      id !== candidate.id ||
+      category !== candidate.category ||
+      description !== candidate.description ||
+      isFavorite !== candidate.isFavorite ||
+      createdAt !== candidate.createdAt ||
+      updatedAt !== candidate.updatedAt
+    ) {
+      changed = true;
+    }
+
+    normalized.push(normalizedTemplate);
+  });
+
+  return { templates: normalized, changed };
 }
 
 /**
@@ -242,7 +338,11 @@ function generateDefaultTemplates(): PromptTemplate[] {
  */
 export function savePromptTemplates(templates: PromptTemplate[]): void {
   try {
-    localStorage.setItem(STORAGE_KEYS.PROMPT_TEMPLATES, JSON.stringify(templates));
+    const { templates: normalizedTemplates } = normalizeStoredTemplates(templates);
+    localStorage.setItem(
+      STORAGE_KEYS.PROMPT_TEMPLATES,
+      JSON.stringify(normalizedTemplates)
+    );
   } catch (error) {
     console.error('Failed to save prompt templates:', error);
     throw new Error('保存提示词模板失败');
@@ -263,17 +363,19 @@ export function loadPromptTemplates(): PromptTemplate[] {
       return defaultTemplates;
     }
     
-    const parsed = JSON.parse(stored) as PromptTemplate[];
-    
+    const parsed: unknown = JSON.parse(stored);
+
     if (!Array.isArray(parsed)) {
       const defaultTemplates = generateDefaultTemplates();
       savePromptTemplates(defaultTemplates);
       return defaultTemplates;
     }
-    
-    return parsed
-      .filter(t => t && t.id && t.name && t.content)
-      .sort((a, b) => b.updatedAt - a.updatedAt);
+
+    const { templates, changed } = normalizeStoredTemplates(parsed);
+    if (changed) {
+      savePromptTemplates(templates);
+    }
+    return templates;
   } catch (error) {
     console.error('Failed to load prompt templates:', error);
     return generateDefaultTemplates();

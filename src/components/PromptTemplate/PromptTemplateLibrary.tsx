@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Drawer,
   Input,
@@ -35,6 +35,7 @@ interface PromptTemplateLibraryProps {
 
 export function PromptTemplateLibrary({ open, onClose, onUseTemplate }: PromptTemplateLibraryProps) {
   const {
+    templates,
     initialized,
     initTemplates,
     addTemplate,
@@ -48,23 +49,64 @@ export function PromptTemplateLibrary({ open, onClose, onUseTemplate }: PromptTe
     showFavoritesOnly,
     setShowFavoritesOnly,
     resetToDefaults,
-    getFilteredTemplates,
-    getCategories,
   } = usePromptTemplateStore();
 
   const [editorOpen, setEditorOpen] = useState(false);
-  const [editingTemplate, setEditingTemplate] = useState<PromptTemplate | null>(null);
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewTemplate, setPreviewTemplate] = useState<PromptTemplate | null>(null);
+  const [previewTemplateId, setPreviewTemplateId] = useState<string | null>(null);
 
   useEffect(() => {
     if (open && !initialized) {
       initTemplates();
     }
-  }, [open, initialized]);
+  }, [open, initialized, initTemplates]);
 
-  const filteredTemplates = getFilteredTemplates();
-  const categories = getCategories();
+  useEffect(() => {
+    if (!open) {
+      setEditorOpen(false);
+      setEditingTemplateId(null);
+      setPreviewOpen(false);
+      setPreviewTemplateId(null);
+    }
+  }, [open]);
+
+  const filteredTemplates = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+
+    return templates.filter((template) => {
+      if (selectedCategory && template.category !== selectedCategory) {
+        return false;
+      }
+
+      if (showFavoritesOnly && !template.isFavorite) {
+        return false;
+      }
+
+      if (query) {
+        return (
+          template.name.toLowerCase().includes(query) ||
+          template.description?.toLowerCase().includes(query) ||
+          template.content.toLowerCase().includes(query) ||
+          template.category.toLowerCase().includes(query)
+        );
+      }
+
+      return true;
+    });
+  }, [templates, selectedCategory, searchQuery, showFavoritesOnly]);
+
+  const categories = useMemo(
+    () => Array.from(new Set(templates.map((template) => template.category))).sort(),
+    [templates]
+  );
+  const editingTemplate = editingTemplateId
+    ? templates.find((template) => template.id === editingTemplateId) ?? null
+    : null;
+  const previewTemplate = previewTemplateId
+    ? templates.find((template) => template.id === previewTemplateId) ?? null
+    : null;
+  const hasActiveFilters = Boolean(selectedCategory || searchQuery || showFavoritesOnly);
 
   const handleUseTemplate = (content: string) => {
     onUseTemplate(content);
@@ -72,32 +114,45 @@ export function PromptTemplateLibrary({ open, onClose, onUseTemplate }: PromptTe
   };
 
   const handleEditTemplate = (template: PromptTemplate) => {
-    setEditingTemplate(template);
+    setEditingTemplateId(template.id);
+    setPreviewTemplateId(template.id);
     setPreviewOpen(false);
     setEditorOpen(true);
   };
 
   const handleSaveTemplate = (params: CreatePromptTemplateParams) => {
-    if (editingTemplate) {
-      updateTemplate(editingTemplate.id, params);
+    if (editingTemplateId) {
+      updateTemplate(editingTemplateId, params);
     } else {
       addTemplate(params);
     }
-    setEditingTemplate(null);
+    setEditingTemplateId(null);
   };
 
   const handleDeleteTemplate = (id: string) => {
     deleteTemplate(id);
+    if (editingTemplateId === id) {
+      setEditingTemplateId(null);
+      setEditorOpen(false);
+    }
+    if (previewTemplateId === id) {
+      setPreviewTemplateId(null);
+      setPreviewOpen(false);
+    }
     message.success('模板已删除');
   };
 
   const handlePreviewTemplate = (template: PromptTemplate) => {
-    setPreviewTemplate(template);
+    setPreviewTemplateId(template.id);
     setPreviewOpen(true);
   };
 
   const handleReset = () => {
     resetToDefaults();
+    setEditingTemplateId(null);
+    setPreviewTemplateId(null);
+    setEditorOpen(false);
+    setPreviewOpen(false);
     message.success('已重置为默认模板');
   };
 
@@ -119,7 +174,14 @@ export function PromptTemplateLibrary({ open, onClose, onUseTemplate }: PromptTe
                 重置
               </Button>
             </Tooltip>
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setEditorOpen(true)}>
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => {
+                setEditingTemplateId(null);
+                setEditorOpen(true);
+              }}
+            >
               新建模板
             </Button>
           </Space>
@@ -156,7 +218,9 @@ export function PromptTemplateLibrary({ open, onClose, onUseTemplate }: PromptTe
               </Space>
 
               <span className="template-count">
-                共 {filteredTemplates.length} 个模板
+                {hasActiveFilters
+                  ? `共 ${templates.length} 个模板，当前显示 ${filteredTemplates.length} 个`
+                  : `共 ${templates.length} 个模板`}
               </span>
             </Space>
           </Space>
@@ -192,7 +256,7 @@ export function PromptTemplateLibrary({ open, onClose, onUseTemplate }: PromptTe
         template={editingTemplate}
         onClose={() => {
           setEditorOpen(false);
-          setEditingTemplate(null);
+          setEditingTemplateId(null);
         }}
         onSave={handleSaveTemplate}
       />
@@ -202,7 +266,7 @@ export function PromptTemplateLibrary({ open, onClose, onUseTemplate }: PromptTe
         template={previewTemplate}
         onClose={() => {
           setPreviewOpen(false);
-          setPreviewTemplate(null);
+          setPreviewTemplateId(null);
         }}
         onUse={handleUseTemplate}
         onEdit={handleEditTemplate}

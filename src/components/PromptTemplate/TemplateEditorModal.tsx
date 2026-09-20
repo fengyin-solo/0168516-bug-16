@@ -18,7 +18,7 @@ export function TemplateEditorModal({ open, template, onClose, onSave }: Templat
       if (template) {
         form.setFieldsValue({
           name: template.name,
-          description: template.description,
+          description: template.description ?? '',
           category: template.category,
           content: template.content,
         });
@@ -49,6 +49,7 @@ export function TemplateEditorModal({ open, template, onClose, onSave }: Templat
       onOk={handleOk}
       onCancel={onClose}
       width={600}
+      destroyOnClose
       okText="保存"
       cancelText="取消"
     >

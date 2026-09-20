@@ -35,18 +35,12 @@ interface PromptTemplateActions {
 
 type PromptTemplateStore = PromptTemplateState & PromptTemplateActions;
 
-let saveTimeout: ReturnType<typeof setTimeout> | null = null;
-const debouncedSave = (templates: PromptTemplate[]) => {
-  if (saveTimeout) {
-    clearTimeout(saveTimeout);
+const persistTemplates = (templates: PromptTemplate[]) => {
+  try {
+    savePromptTemplates(templates);
+  } catch (error) {
+    console.error('Failed to save prompt templates:', error);
   }
-  saveTimeout = setTimeout(() => {
-    try {
-      savePromptTemplates(templates);
-    } catch (error) {
-      console.error('Failed to save prompt templates:', error);
-    }
-  }, 300);
 };
 
 export const usePromptTemplateStore = create<PromptTemplateStore>((set, get) => ({
@@ -76,51 +70,45 @@ export const usePromptTemplateStore = create<PromptTemplateStore>((set, get) => 
       updatedAt: now,
     };
 
-    set((state) => {
-      const templates = [newTemplate, ...state.templates];
-      debouncedSave(templates);
-      return { templates };
-    });
+    const templates = [newTemplate, ...get().templates];
+    set({ templates });
+    persistTemplates(templates);
 
     return id;
   },
 
   updateTemplate: (id, params) => {
-    set((state) => {
-      const templates = state.templates.map((t) => {
-        if (t.id !== id) return t;
-        return {
-          ...t,
-          ...params,
-          updatedAt: Date.now(),
-        };
-      });
-      debouncedSave(templates);
-      return { templates };
+    const templates = get().templates.map((template) => {
+      if (template.id !== id) return template;
+      return {
+        ...template,
+        ...params,
+        updatedAt: Date.now(),
+      };
     });
+
+    set({ templates });
+    persistTemplates(templates);
   },
 
   deleteTemplate: (id) => {
-    set((state) => {
-      const templates = state.templates.filter((t) => t.id !== id);
-      debouncedSave(templates);
-      return { templates };
-    });
+    const templates = get().templates.filter((template) => template.id !== id);
+    set({ templates });
+    persistTemplates(templates);
   },
 
   toggleFavorite: (id) => {
-    set((state) => {
-      const templates = state.templates.map((t) => {
-        if (t.id !== id) return t;
-        return {
-          ...t,
-          isFavorite: !t.isFavorite,
-          updatedAt: Date.now(),
-        };
-      });
-      debouncedSave(templates);
-      return { templates };
+    const templates = get().templates.map((template) => {
+      if (template.id !== id) return template;
+      return {
+        ...template,
+        isFavorite: !template.isFavorite,
+        updatedAt: Date.now(),
+      };
     });
+
+    set({ templates });
+    persistTemplates(templates);
   },
 
   setSelectedCategory: (category) => {
