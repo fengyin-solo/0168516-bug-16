@@ -271,9 +271,10 @@ export function loadPromptTemplates(): PromptTemplate[] {
       return defaultTemplates;
     }
     
+    // 保持保存时的原始顺序：收藏/编辑会更新 updatedAt，
+    // 若在此按 updatedAt 重排，重新打开后卡片位置会跳动、看起来像错位
     return parsed
-      .filter(t => t && t.id && t.name && t.content)
-      .sort((a, b) => b.updatedAt - a.updatedAt);
+      .filter(t => t && t.id && t.name && t.content);
   } catch (error) {
     console.error('Failed to load prompt templates:', error);
     return generateDefaultTemplates();

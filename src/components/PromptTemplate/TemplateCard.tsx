@@ -26,15 +26,10 @@ export function TemplateCard({
   onToggleFavorite,
   onPreview,
 }: TemplateCardProps) {
-  const handleDeleteClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-  };
-
   return (
     <Card
       className="template-card"
       hoverable
-      onClick={() => onPreview(template)}
       actions={[
         <Tooltip key="favorite" title={template.isFavorite ? '取消收藏' : '收藏'}>
           <Button
@@ -71,6 +66,7 @@ export function TemplateCard({
             title="确认删除"
             description="确定要删除这个模板吗？"
             onConfirm={() => onDelete(template.id)}
+            onPopupClick={(e) => e.stopPropagation()}
             okText="删除"
             cancelText="取消"
           >
@@ -78,31 +74,36 @@ export function TemplateCard({
               type="text"
               danger
               icon={<DeleteOutlined />}
-              onClick={handleDeleteClick}
+              onClick={(e) => e.stopPropagation()}
             />
           </Popconfirm>
         </Tooltip>,
       ]}
     >
-      <div className="template-card-header">
-        <h4 className="template-name" title={template.name}>
-          {template.name}
-        </h4>
-        <Tag color="blue" className="template-category">
-          {template.category}
-        </Tag>
-      </div>
+      <div
+        className="template-card-body"
+        onClick={() => onPreview(template)}
+      >
+        <div className="template-card-header">
+          <h4 className="template-name" title={template.name}>
+            {template.name}
+          </h4>
+          <Tag color="blue" className="template-category">
+            {template.category}
+          </Tag>
+        </div>
 
-      {template.description && (
-        <p className="template-description" title={template.description}>
-          {template.description}
-        </p>
-      )}
+        {template.description && (
+          <p className="template-description" title={template.description}>
+            {template.description}
+          </p>
+        )}
 
-      <div className="template-content-preview">
-        {template.content.length > 100
-          ? `${template.content.substring(0, 100)}...`
-          : template.content}
+        <div className="template-content-preview">
+          {template.content.length > 100
+            ? `${template.content.substring(0, 100)}...`
+            : template.content}
+        </div>
       </div>
 
       <Button
